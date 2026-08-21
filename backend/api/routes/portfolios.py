@@ -83,14 +83,11 @@ async def add_transaction(
             import asyncio
             
             try:
-                info = await asyncio.to_thread(lambda: yf.Ticker(f"{symbol}.NS").info)
-                if not info or ('regularMarketPrice' not in info and 'previousClose' not in info and 'shortName' not in info):
-                    info = await asyncio.to_thread(lambda: yf.Ticker(symbol).info)
-                    if not info or ('regularMarketPrice' not in info and 'previousClose' not in info and 'shortName' not in info):
-                        raise HTTPException(status_code=400, detail=f"Stock symbol '{symbol}' could not be resolved.")
-                    exchange = None
-                else:
-                    exchange = "NSE"
+                from backend.utils.market import resolve_symbol_info_sync
+                try:
+                    info, exchange = await asyncio.to_thread(resolve_symbol_info_sync, symbol)
+                except ValueError as ve:
+                    raise HTTPException(status_code=400, detail=f"Stock symbol '{symbol}' could not be resolved.")
                     
                 actual_name = info.get('longName') or info.get('shortName') or symbol
                 current_price = info.get('regularMarketPrice') or info.get('currentPrice') or info.get('previousClose') or 0.0

@@ -17,8 +17,12 @@ TokenDep = Annotated[str, Depends(reusable_oauth2)]
 async def get_current_user(session: SessionDep, token: TokenDep) -> User:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
+        user_id_str: str = payload.get("sub")
+        if user_id_str is None:
+            raise HTTPException(status_code=403, detail="Could not validate credentials")
+        try:
+            user_id = int(user_id_str)
+        except ValueError:
             raise HTTPException(status_code=403, detail="Could not validate credentials")
     except (JWTError, ValidationError):
         raise HTTPException(
@@ -26,14 +30,15 @@ async def get_current_user(session: SessionDep, token: TokenDep) -> User:
             detail="Could not validate credentials",
         )
     
-    result = await session.execute(select(User).where(User.id == int(user_id)))
+    result = await session.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
         
     # Enable Row-Level Security for this transaction
     from sqlalchemy import text
-    await session.execute(text("SELECT set_config('app.current_user_id', :id, true)"), {"id": str(user.id)})
+    if session.bind and session.bind.dialect.name == 'postgresql':
+        await session.execute(text("SELECT set_config('app.current_user_id', :id, true)"), {"id": str(user.id)})
     # DO NOT commit here. We need the current transaction to remain open so that the is_local=true 
     # setting applies to the queries/inserts in the route handler.
     

@@ -35,15 +35,11 @@ async def add_to_watchlist(symbol: str, session: SessionDep, current_user: Curre
     if not security:
         # Validate using yfinance
         try:
-            info = await asyncio.to_thread(lambda: yf.Ticker(f"{symbol}.NS").info)
-            if not info or ('regularMarketPrice' not in info and 'previousClose' not in info and 'shortName' not in info):
-                # Try without .NS
-                info = await asyncio.to_thread(lambda: yf.Ticker(symbol).info)
-                if not info or ('regularMarketPrice' not in info and 'previousClose' not in info and 'shortName' not in info):
-                    raise HTTPException(status_code=400, detail="Stock symbol could not be resolved.")
-                exchange = None
-            else:
-                exchange = "NSE"
+            from backend.utils.market import resolve_symbol_info_sync
+            try:
+                info, exchange = await asyncio.to_thread(resolve_symbol_info_sync, symbol)
+            except ValueError as ve:
+                raise HTTPException(status_code=400, detail=str(ve))
             
             actual_name = info.get('longName') or info.get('shortName') or symbol
             current_price = info.get('regularMarketPrice') or info.get('currentPrice') or info.get('previousClose') or 0.0

@@ -67,8 +67,8 @@ async def search_securities(request: Request, session: SessionDep, current_user:
 
 @router.get("", response_model=list[SecurityResponse])
 @limiter.limit(settings.RATE_LIMIT_DEFAULT)
-async def list_securities(request: Request, session: SessionDep, current_user: CurrentUser):
-    result = await session.execute(select(Security).order_by(Security.symbol))
+async def list_securities(request: Request, session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 100):
+    result = await session.execute(select(Security).order_by(Security.symbol).offset(skip).limit(limit))
     return result.scalars().all()
 
 @router.get("/indices")
@@ -106,14 +106,11 @@ async def get_security_by_symbol(symbol: str, session: SessionDep, current_user:
         logger = logging.getLogger(__name__)
         
         try:
-            info = await asyncio.to_thread(lambda: yf.Ticker(f"{symbol}.NS").info)
-            if not info or ('regularMarketPrice' not in info and 'previousClose' not in info and 'shortName' not in info):
-                info = await asyncio.to_thread(lambda: yf.Ticker(symbol).info)
-                if not info or ('regularMarketPrice' not in info and 'previousClose' not in info and 'shortName' not in info):
-                    raise HTTPException(status_code=404, detail="Security not found and could not be resolved.")
-                exchange = None
-            else:
-                exchange = "NSE"
+            from backend.utils.market import resolve_symbol_info_sync
+            try:
+                info, exchange = await asyncio.to_thread(resolve_symbol_info_sync, symbol)
+            except ValueError as ve:
+                raise HTTPException(status_code=404, detail="Security not found and could not be resolved.")
                 
             actual_name = info.get('longName') or info.get('shortName') or symbol
             current_price = info.get('regularMarketPrice') or info.get('currentPrice') or info.get('previousClose') or 0.0
@@ -139,7 +136,7 @@ async def get_security_by_symbol(symbol: str, session: SessionDep, current_user:
     # Fetch extended details from yfinance (Threaded because it's synchronous I/O)
     extended = await asyncio.to_thread(get_stock_extended_details, security.symbol, security.exchange)
     
-    current_val = live_price.current_price if live_price else extended.get("previous_close")
+    current_val = live_price.current_price if live_price else (extended.get("current_price") or extended.get("previous_close"))
     prev_close = extended.get("previous_close")
     
     change = None
@@ -177,15 +174,18 @@ async def get_security_history(request: Request, symbol: str, session: SessionDe
     # Lookup in DB
     result = await session.execute(select(Security).where(Security.symbol == symbol))
     security = result.scalars().first()
-    if not security:
+    
+    historical_prices = []
+    
+    if security:
+        hist_res = await session.execute(
+            select(HistoricalPrice)
+            .where(HistoricalPrice.security_id == security.id)
+            .order_by(HistoricalPrice.date.asc())
+        )
+        historical_prices = hist_res.scalars().all()
+    elif not symbol.startswith('^'):
         raise HTTPException(status_code=404, detail="Security not found")
-        
-    hist_res = await session.execute(
-        select(HistoricalPrice)
-        .where(HistoricalPrice.security_id == security.id)
-        .order_by(HistoricalPrice.date.asc())
-    )
-    historical_prices = hist_res.scalars().all()
     
     # Simple mapping of period to days for DB filtering
     days_map = {"1d": 1, "5d": 5, "1mo": 30, "3mo": 90, "6mo": 180, "1y": 365, "ytd": 365, "max": 3650}
@@ -200,7 +200,7 @@ async def get_security_history(request: Request, symbol: str, session: SessionDe
         from backend.utils.market import format_yf_symbol
         from backend.utils.market_data import market_data_provider
         
-        yf_symbol = format_yf_symbol(security.symbol, security.exchange)
+        yf_symbol = format_yf_symbol(security.symbol, security.exchange) if security else symbol
         try:
             hist = await market_data_provider.get_history(yf_symbol, period=period)
             if not hist.empty:

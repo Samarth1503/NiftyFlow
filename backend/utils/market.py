@@ -87,13 +87,25 @@ def get_live_indices():
                     if price and prev_close:
                         change = price - prev_close
                         percent = (change / prev_close) * 100
+                        import datetime
+                        timestamp = info.get('regularMarketTime')
+                        ts_iso = None
+                        if timestamp:
+                            # yfinance returns UTC timestamp
+                            dt = datetime.datetime.fromtimestamp(timestamp, tz=datetime.timezone.utc)
+                            # Convert to IST (UTC+5:30)
+                            ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+                            dt_ist = dt.astimezone(ist)
+                            ts_iso = dt_ist.isoformat()
+                        
                         results.append({
                             "symbol": symbol,
                             "name": name,
-                            "price": f"{price:,.2f}",
-                            "change": f"{change:,.2f}",
-                            "percent": f"{percent:+.2f}%",
-                            "isUp": change >= 0
+                            "current_price": float(price),
+                            "change": float(change),
+                            "change_percent": float(percent),
+                            "isUp": change >= 0,
+                            "timestamp": ts_iso
                         })
                         continue
             except Exception as e:
@@ -102,10 +114,11 @@ def get_live_indices():
                 
             # Fallback if specific ticker fails
             results.append({
+                "symbol": symbol,
                 "name": name,
-                "price": "0.00",
-                "change": "0.00",
-                "percent": "0.00%",
+                "current_price": 0.0,
+                "change": 0.0,
+                "change_percent": 0.0,
                 "isUp": False
             })
     except Exception as e:
@@ -113,10 +126,11 @@ def get_live_indices():
         # Fallback empty data
         for name in indices_map.values():
             results.append({
+                "symbol": symbol,
                 "name": name,
-                "price": "N/A",
-                "change": "0.00",
-                "percent": "0.00%",
+                "current_price": None,
+                "change": None,
+                "change_percent": None,
                 "isUp": False
             })
             
@@ -153,6 +167,7 @@ def get_stock_extended_details(symbol: str, exchange: str = None) -> dict:
             details["fifty_two_wk_low"] = info.get("fiftyTwoWeekLow")
             details["eps"] = info.get("trailingEps") or info.get("forwardEps")
             details["previous_close"] = info.get("previousClose") or info.get("regularMarketPreviousClose")
+            details["current_price"] = info.get("regularMarketPrice") or info.get("currentPrice")
             
         # 2. Fetch 1 month history (daily)
         hist = ticker.history(period="1mo")
@@ -168,3 +183,16 @@ def get_stock_extended_details(symbol: str, exchange: str = None) -> dict:
         
     return details
 
+
+def resolve_symbol_info_sync(symbol: str) -> tuple[dict, str]:
+    '''
+    Synchronously resolves a symbol via yfinance, attempting .NS fallback.
+    Returns (info_dict, exchange_str) or raises ValueError.
+    '''
+    info = yf.Ticker(f"{symbol}.NS").info
+    if not info or ('regularMarketPrice' not in info and 'previousClose' not in info and 'shortName' not in info):
+        info = yf.Ticker(symbol).info
+        if not info or ('regularMarketPrice' not in info and 'previousClose' not in info and 'shortName' not in info):
+            raise ValueError(f"Stock symbol '{symbol}' could not be resolved.")
+        return info, None
+    return info, "NSE"
