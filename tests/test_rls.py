@@ -15,14 +15,14 @@ from backend.core.config import settings
 async def cleanup_rls_db():
     async with AsyncSessionLocal() as session:
         await session.execute(text("SELECT set_config('app.current_user_id', '0', false)"))
-        await session.execute(Portfolio.__table__.delete())
-        await session.execute(User.__table__.delete().where(User.email.in_(["user_a@niftyflow.com", "user_b@niftyflow.com"])))
+        # await session.execute(Portfolio.__table__.delete())
+        # await session.execute(User.__table__.delete().where(User.email.in_(["user_a@niftyflow.com", "user_b@niftyflow.com"])))
         await session.commit()
     yield
     async with AsyncSessionLocal() as session:
         await session.execute(text("SELECT set_config('app.current_user_id', '0', false)"))
-        await session.execute(Portfolio.__table__.delete())
-        await session.execute(User.__table__.delete().where(User.email.in_(["user_a@niftyflow.com", "user_b@niftyflow.com"])))
+        # await session.execute(Portfolio.__table__.delete())
+        # await session.execute(User.__table__.delete().where(User.email.in_(["user_a@niftyflow.com", "user_b@niftyflow.com"])))
         await session.commit()
 
 @pytest.mark.asyncio

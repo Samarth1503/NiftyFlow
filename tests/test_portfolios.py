@@ -14,20 +14,20 @@ test_password = "portfoliopassword"
 async def cleanup_portfolio_db():
     # Setup - clear any old test data
     async with AsyncSessionLocal() as session:
-        await session.execute(Portfolio.__table__.delete())
-        await session.execute(LivePrice.__table__.delete())
-        await session.execute(Security.__table__.delete())
-        await session.execute(User.__table__.delete().where(User.email == test_email))
+        # await session.execute(Portfolio.__table__.delete())
+        # await session.execute(LivePrice.__table__.delete())
+        # await session.execute(Security.__table__.delete())
+        # await session.execute(User.__table__.delete().where(User.email == test_email))
         await session.commit()
         
     yield
     
     # Teardown
     async with AsyncSessionLocal() as session:
-        await session.execute(Portfolio.__table__.delete())
-        await session.execute(LivePrice.__table__.delete())
-        await session.execute(Security.__table__.delete())
-        await session.execute(User.__table__.delete().where(User.email == test_email))
+        # await session.execute(Portfolio.__table__.delete())
+        # await session.execute(LivePrice.__table__.delete())
+        # await session.execute(Security.__table__.delete())
+        # await session.execute(User.__table__.delete().where(User.email == test_email))
         await session.commit()
 
 @pytest.mark.asyncio

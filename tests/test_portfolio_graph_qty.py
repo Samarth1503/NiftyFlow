@@ -12,8 +12,8 @@ test_password = "password123"
 async def cleanup_db():
     async with AsyncSessionLocal() as session:
         from backend.models.portfolio import Portfolio
-        await session.execute(Portfolio.__table__.delete())
-        await session.execute(User.__table__.delete().where(User.email == test_email))
+        # await session.execute(Portfolio.__table__.delete())
+        # await session.execute(User.__table__.delete().where(User.email == test_email))
         await session.commit()
 
 @pytest.mark.asyncio

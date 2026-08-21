@@ -11,15 +11,15 @@ test_password = "detailspassword"
 @pytest.fixture(autouse=True)
 async def cleanup_db():
     async with AsyncSessionLocal() as session:
-        await session.execute(Security.__table__.delete())
-        await session.execute(User.__table__.delete().where(User.email == test_email))
+        # await session.execute(Security.__table__.delete())
+        # await session.execute(User.__table__.delete().where(User.email == test_email))
         await session.commit()
         
     yield
     
     async with AsyncSessionLocal() as session:
-        await session.execute(Security.__table__.delete())
-        await session.execute(User.__table__.delete().where(User.email == test_email))
+        # await session.execute(Security.__table__.delete())
+        # await session.execute(User.__table__.delete().where(User.email == test_email))
         await session.commit()
 
 @pytest.mark.asyncio
