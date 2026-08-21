@@ -1,17 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --background: #202124;
+  --background: #101218;
   --foreground: #e8eaed;
   
-  /* Google Finance specific colors */
-  --gf-surface: #303134;
-  --gf-green: #81c995;
-  --gf-green-bg: rgba(129, 201, 149, 0.15);
-  --gf-red: #f28b82;
-  --gf-red-bg: rgba(242, 139, 130, 0.15);
+  /* NiftyFlow specific colors */
+  --gf-surface: #28292c78;
+  --gf-green: #90e58c;
+  --gf-green-bg: rgba(144, 229, 140, 0.15);
+  --gf-red: #ffa9af;
+  --gf-red-bg: rgba(255, 169, 175, 0.15);
   --gf-gray-text: #9aa0a6;
-  --gf-border: #5f6368;
+  --gf-border: #3c4043;
   --gf-blue: #8ab4f8;
 }
 
@@ -63,10 +63,9 @@ h1, h2, h3, h4, h5, h6 {
   background: transparent; 
 }
 ::-webkit-scrollbar-thumb {
-  background: #5f6368; 
+  background: #3c4043; 
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #9aa0a6; 
 }
-

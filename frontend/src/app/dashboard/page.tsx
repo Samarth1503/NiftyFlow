@@ -1,274 +1,273 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import api from "@/lib/api";
-import { Plus, TrendingDown, TrendingUp, ChevronDown, Search } from "lucide-react";
 import { useGlobalData } from "@/context/GlobalDataContext";
-
-interface Portfolio {
-  id: number;
-  name: string;
-}
-
-interface IndexData {
-  name: string;
-  price: string;
-  change: string;
-  percent: string;
-  isUp: boolean;
-  symbol?: string;
-}
-
-interface Security {
-  id: number;
-  symbol: string;
-  name: string;
-  exchange: string | null;
-}
+import api from "@/lib/api";
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { ChevronDown, Plus, ExternalLink, Clock } from "lucide-react";
 
 export default function Dashboard() {
   const router = useRouter();
-  const { portfolios, watchlist, indices, refreshData } = useGlobalData();
-  
-        
-  // Search State
-  const [searchQuery, setSearchQuery] = useState("");
-    const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const { indices, portfolios, watchlist } = useGlobalData();
+  const safeIndices = Array.isArray(indices) ? indices : [];
 
-  // Direct Add State
-  const [directAddSymbol, setDirectAddSymbol] = useState("");
-  const [isDirectAddFocused, setIsDirectAddFocused] = useState(false);
+  // Chart State (Real NIFTY 50 Data)
+  const timeframes = ["1M", "3M", "6M", "YTD", "1Y", "5Y", "MAX"];
+  const [activeTimeframe, setActiveTimeframe] = useState("1M");
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [niftyData, setNiftyData] = useState<any>(null);
 
-  const [isCreating, setIsCreating] = useState(false);
-  const [newName, setNewName] = useState("");
+  // News State
   const [news, setNews] = useState<any[]>([]);
 
-  
-  
-  
+  // Calculate Chart Direction based on actual data
+  const chartDirection = useMemo(() => {
+    if (chartData.length < 2) return 'neutral';
     
-  const fetchNews = () => {
-    api.get("/news").then(res => setNews(res.data)).catch(console.error);
-  };
+    // Find first valid price
+    let firstPrice = null;
+    for (let i = 0; i < chartData.length; i++) {
+        if (chartData[i].close !== null && chartData[i].close !== undefined) {
+            firstPrice = chartData[i].close;
+            break;
+        }
+    }
+    
+    // Find last valid price
+    let lastPrice = null;
+    for (let i = chartData.length - 1; i >= 0; i--) {
+        if (chartData[i].close !== null && chartData[i].close !== undefined) {
+            lastPrice = chartData[i].close;
+            break;
+        }
+    }
+    
+    if (firstPrice === null || lastPrice === null) return 'neutral';
+    if (lastPrice > firstPrice) return 'up';
+    if (lastPrice < firstPrice) return 'down';
+    return 'neutral';
+  }, [chartData]);
 
+  const chartColor = chartDirection === 'up' ? '#90e58c' : (chartDirection === 'down' ? '#ff5662' : '#9aa0a6');
+
+  // Format Last Updated Timestamp
+  const formattedTimestamp = useMemo(() => {
+      if (!niftyData || !niftyData.timestamp) return "Last updated: Unavailable";
+      
+      try {
+          const dt = new Date(niftyData.timestamp);
+          const options: Intl.DateTimeFormatOptions = { 
+              day: 'numeric', 
+              month: 'short', 
+              year: 'numeric', 
+              hour: 'numeric', 
+              minute: '2-digit', 
+              hour12: true 
+          };
+          return `Last updated: ${dt.toLocaleString('en-IN', options)}`;
+      } catch (e) {
+          return "Last updated: Unavailable";
+      }
+  }, [niftyData]);
+
+  // Fetch NIFTY 50 History
   useEffect(() => {
-    fetchNews();
+    let period = "1mo";
+    if (activeTimeframe === "3M") period = "3mo";
+    else if (activeTimeframe === "6M") period = "6mo";
+    else if (activeTimeframe === "YTD") period = "ytd";
+    else if (activeTimeframe === "1Y") period = "1y";
+    else if (activeTimeframe === "5Y") period = "5y";
+    else if (activeTimeframe === "MAX") period = "max";
+    
+    api.get(`/securities/symbol/%5ENSEI/history?period=${period}`)
+      .then(res => {
+          const formatted = res.data.map((d: any) => ({
+              date: new Date(d.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+              close: d.price
+          }));
+          setChartData(formatted);
+      })
+      .catch(console.error);
+  }, [activeTimeframe]);
+
+  // Set Nifty Data from indices
+  useEffect(() => {
+    const n50 = safeIndices.find(idx => idx.symbol === "^NSEI");
+    if (n50) setNiftyData(n50);
+  }, [safeIndices]);
+
+  // Fetch News
+  useEffect(() => {
+    api.get("/news").then(res => setNews(res.data)).catch(console.error);
   }, []);
 
-  const handleAddToWatchlist = async (e: React.MouseEvent, symbol: string) => {
-    e.stopPropagation();
-    try {
-      await api.post(`/watchlist/${encodeURIComponent(symbol)}`);
-      refreshData();
-    } catch (err) {
-      console.error("Failed to add to watchlist:", err);
-      alert("Failed to add to watchlist.");
-    }
-  };
-
-  // Search Logic
-  const getFilteredSecurities = () => {
-    if (!searchQuery.trim()) return [];
-    
-    const query = searchQuery.toLowerCase().trim();
-    
-    return allSecurities.filter(sec => {
-      return sec.symbol.toLowerCase().includes(query) || sec.name.toLowerCase().includes(query);
-    }).sort((a, b) => {
-      const aSym = a.symbol.toLowerCase();
-      const bSym = b.symbol.toLowerCase();
-      const aName = a.name.toLowerCase();
-      const bName = b.name.toLowerCase();
-      
-      if (aSym === query && bSym !== query) return -1;
-      if (bSym === query && aSym !== query) return 1;
-      
-      if (aSym.startsWith(query) && !bSym.startsWith(query)) return -1;
-      if (bSym.startsWith(query) && !aSym.startsWith(query)) return 1;
-      
-      if (aName.startsWith(query) && !bName.startsWith(query)) return -1;
-      if (bName.startsWith(query) && !aName.startsWith(query)) return 1;
-      
-      return aSym.localeCompare(bSym);
-    }).slice(0, 8); // Display top 8 results
-  };
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await api.post("/portfolios", { name: newName, description: "" });
-      setIsCreating(false);
-      setNewName("");
-      refreshData();
-    } catch (err) {
-      console.error("Failed to create portfolio");
-    }
-  };
-
-  const [searchResults, setSearchResults] = useState<Security[]>([]);
-
-  const [directAddResults, setDirectAddResults] = useState<Security[]>([]);
-
-  
-  useEffect(() => {
-    if (!searchQuery.trim() || searchQuery.length < 2) {
-      setSearchResults([]);
-      return;
-    }
-    const delayDebounceFn = setTimeout(() => {
-      api.get(`/securities/search?q=${searchQuery}`).then(res => setSearchResults(res.data)).catch(console.error);
-    }, 300);
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery]);
-
-  useEffect(() => {
-    if (!directAddSymbol.trim() || directAddSymbol.length < 2) {
-      setDirectAddResults([]);
-      return;
-    }
-    const delayDebounceFn = setTimeout(() => {
-      api.get(`/securities/search?q=${directAddSymbol}`).then(res => setDirectAddResults(res.data.slice(0, 5))).catch(console.error);
-    }, 300);
-    return () => clearTimeout(delayDebounceFn);
-  }, [directAddSymbol]);
-
-  const handleSelectStock = (sec: Security) => {
-    setSearchQuery("");
-    setIsSearchFocused(false);
-    router.push(`/stocks/${sec.symbol}`);
-  };
-
-  const handleDirectAdd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!directAddSymbol.trim()) return;
-    try {
-      await api.post(`/watchlist/${encodeURIComponent(directAddSymbol.trim())}`);
-      setDirectAddSymbol("");
-      refreshData();
-    } catch (err: any) {
-      console.error("Failed to add to watchlist directly:", err);
-      alert(err.response?.data?.detail || "Failed to add to watchlist. Please check the symbol and try again.");
-    }
-  };
-
   return (
-    <div className="flex flex-col lg:flex-row gap-8 relative">
-      {isCreating && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center">
-          <div className="bg-[var(--gf-surface)] p-6 rounded-xl border border-[var(--gf-border)] w-96 shadow-2xl">
-            <h3 className="font-medium mb-4 text-lg">Create Portfolio</h3>
-            <form onSubmit={handleCreate} className="flex flex-col gap-4">
-              <div>
-                <label className="block text-xs text-[var(--gf-gray-text)] mb-1">Portfolio Name</label>
-                <input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  className="w-full bg-[var(--background)] border border-[var(--gf-border)] rounded-lg p-2 text-sm focus:border-[var(--gf-blue)] outline-none"
-                  required
-                  autoFocus
-                />
+    <div className="flex flex-col gap-6 w-full max-w-5xl pb-12">
+      
+
+
+      {/* Index Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {safeIndices.slice(0, 3).map((idx, i) => (
+          <div 
+            key={i} 
+            onClick={() => idx.symbol && router.push(`/stocks/${encodeURIComponent(idx.symbol)}`)}
+            className="bg-[var(--gf-surface)] border border-[var(--gf-border)] rounded-xl p-5 cursor-pointer hover:bg-[#3c4043] transition-colors flex flex-col justify-between h-36"
+          >
+            <div>
+              <div className="text-sm text-[var(--foreground)] mb-1">{idx.name}</div>
+              <div className="text-2xl font-medium tracking-tight mb-1">{idx.current_price?.toLocaleString()}</div>
+              <div className={`text-sm font-medium ${(idx.change != null && idx.change > 0) ? 'text-[#90e58c]' : 'text-[#ffa9af]'}`}>
+                {idx.change != null && idx.change > 0 ? '+' : ''}{Number(idx.change || 0).toFixed(2)} ({idx.change_percent != null && idx.change_percent > 0 ? '+' : ''}{Number(idx.change_percent || 0).toFixed(2)}%)
               </div>
-              <div className="flex justify-end gap-2 mt-2">
-                <button type="button" onClick={() => setIsCreating(false)} className="px-4 py-2 text-sm text-[var(--gf-gray-text)] hover:text-white transition-colors">Cancel</button>
-                <button type="submit" className="px-4 py-2 text-sm bg-[var(--gf-blue)] text-black font-medium rounded-lg">Save</button>
-              </div>
-            </form>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Main Charting Area */}
+      <div className="bg-[var(--gf-surface)] border border-[var(--gf-border)] rounded-xl p-6">
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            <h2 className="text-xl font-medium text-[var(--foreground)]">{niftyData?.name || "NIFTY 50"}</h2>
+            <div className="flex items-end gap-3 mt-1">
+              <span className="text-3xl font-medium tracking-tight">{niftyData?.price || "..."}</span>
+              <span className={`text-lg font-medium pb-0.5 ${niftyData?.isUp ? 'text-[#90e58c]' : 'text-[#ffa9af]'}`}>
+                {niftyData?.change || "..."} ({niftyData?.percent || "..."})
+              </span>
+            </div>
+            {/* Last Updated Timestamp */}
+            <div className="text-xs text-[var(--gf-gray-text)] mt-2 flex items-center gap-1">
+              <Clock size={12} />
+              {formattedTimestamp}
+            </div>
+          </div>
+          
+          <div className="flex gap-2">
+            {["Area", "Compare", "Indicators"].map(btn => (
+              <button key={btn} className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#3c4043] text-sm font-medium hover:bg-[#4a4d51] transition-colors border border-[var(--gf-border)]">
+                {btn === "Area" && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18"/><path d="M7 14l5-5 5 5 4-4"/></svg>}
+                {btn}
+                <ChevronDown size={14} className="text-[var(--gf-gray-text)]" />
+              </button>
+            ))}
           </div>
         </div>
-      )}
 
-      {/* Sidebar - Portfolios & Navigation */}
-      <div className="w-full lg:w-64 flex-shrink-0 order-last lg:order-first mb-12 lg:mb-0">
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-4 cursor-pointer hover:bg-[#303134] p-2 -mx-2 rounded">
-            <h3 className="font-medium text-[var(--foreground)]">Portfolios</h3>
-            <ChevronDown size={16} />
-          </div>
-          <button onClick={() => setIsCreating(true)} className="flex items-center gap-2 text-sm bg-[var(--gf-surface)] border border-[var(--gf-border)] px-4 py-2 rounded-full hover:bg-opacity-80 transition-colors w-full justify-center">
-            <Plus size={16} /> Create portfolio
-          </button>
-          
-          <div className="mt-4 space-y-2">
-            {portfolios.length === 0 ? (
-              <div className="text-sm text-[var(--gf-gray-text)] text-center py-4 border border-dashed border-[var(--gf-border)] rounded-lg">No portfolios yet.</div>
-            ) : (
-              portfolios.map(p => (
-                <Link key={p.id} href={`/portfolio/${p.id}`}>
-                  <div className="text-sm text-[var(--gf-gray-text)] hover:text-[var(--foreground)] cursor-pointer py-1.5 px-2 -mx-2 rounded hover:bg-[#303134] transition-colors">{p.name}</div>
-                </Link>
-              ))
-            )}
-          </div>
+        <div className="h-[400px] w-full mt-4 -ml-4 relative">
+          {chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={chartColor} stopOpacity={0.6}/>
+                    <stop offset="95%" stopColor={chartColor} stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#3c4043" vertical={false} />
+                <XAxis 
+                  dataKey="date" 
+                  stroke="#9aa0a6" 
+                  tick={{fill: '#9aa0a6', fontSize: 12}} 
+                  tickMargin={10} 
+                  minTickGap={30}
+                />
+                <YAxis 
+                  domain={['auto', 'auto']} 
+                  stroke="#9aa0a6" 
+                  tick={{fill: '#9aa0a6', fontSize: 12}}
+                  tickFormatter={(val) => `₹${val.toLocaleString()}`}
+                  width={80}
+                />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#303134', border: '1px solid #3c4043', borderRadius: '8px' }}
+                  itemStyle={{ color: '#e8eaed' }}
+                  labelStyle={{ color: '#9aa0a6' }}
+                  formatter={(value: any) => [`₹${value.toFixed(2)}`, 'Close']}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="close" 
+                  stroke={chartColor} 
+                  strokeWidth={2}
+                  fillOpacity={1} 
+                  fill="url(#colorValue)" 
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-[var(--gf-gray-text)]">
+              Loading Chart Data...
+            </div>
+          )}
+        </div>
+
+        {/* Timeframe Pills */}
+        <div className="flex gap-4 mt-6">
+          {timeframes.map(tf => (
+            <button
+              key={tf}
+              onClick={() => setActiveTimeframe(tf)}
+              className={`text-sm font-medium px-3 py-1 rounded-full transition-colors ${
+                activeTimeframe === tf 
+                  ? "bg-[#4a4d51] text-white" 
+                  : "text-[var(--gf-gray-text)] hover:text-white"
+              }`}
+            >
+              {tf}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 overflow-hidden">
-        {/* Functional Auto-complete Search Bar */}
-        <div className="relative mb-8 z-30">
-          <div className={`bg-[var(--gf-surface)] flex items-center px-4 py-3 border border-transparent transition-all ${isSearchFocused && searchQuery.trim() ? 'rounded-t-2xl border-[var(--gf-border)] border-b-0 bg-[#303134]' : 'rounded-full hover:bg-[#303134]'}`}>
-            <Search size={20} className="text-[var(--gf-gray-text)] mr-3" />
-            <input 
-              type="text" 
-              placeholder="Search for a stock symbol or company name..." 
-              className="bg-transparent border-none outline-none w-full text-[var(--foreground)]"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onFocus={() => setIsSearchFocused(true)}
-              onBlur={() => setTimeout(() => setIsSearchFocused(false), 150)}
-            />
+      {/* Data Tables (3-Column Grid) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
+        
+        {/* Portfolios */}
+        <div className="bg-[var(--gf-surface)] border border-[var(--gf-border)] rounded-xl overflow-hidden flex flex-col h-[400px]">
+          <div className="p-4 border-b border-[var(--gf-border)] flex justify-between items-center">
+            <h3 className="font-medium text-[var(--foreground)]">Your Portfolios</h3>
+            <button onClick={() => window.dispatchEvent(new Event('open-create-portfolio'))} className="text-[var(--gf-blue)] text-sm hover:underline flex items-center gap-1">
+              <Plus size={14} /> Create
+            </button>
           </div>
-          
-          {isSearchFocused && searchQuery.trim() && (
-            <div className="absolute top-full left-0 right-0 bg-[#303134] border border-[var(--gf-border)] border-t-0 rounded-b-2xl overflow-hidden shadow-2xl max-h-[400px] overflow-y-auto">
-              {searchResults.length === 0 ? (
-                <div className="p-4 text-[var(--gf-gray-text)] text-sm">No stocks found matching "{searchQuery}"</div>
-              ) : (
-                searchResults.map(sec => (
-                  <div 
-                    key={sec.id}
-                    className="px-6 py-3 hover:bg-[#3c4043] cursor-pointer flex justify-between items-center group"
-                    onClick={() => handleSelectStock(sec)}
-                  >
-                    <div>
-                      <div className="font-medium text-[var(--foreground)]">{sec.symbol}</div>
-                      <div className="text-sm text-[var(--gf-gray-text)]">{sec.name}</div>
-                    </div>
-                    <button 
-                      onClick={(e) => handleAddToWatchlist(e, sec.symbol)}
-                      className="text-xs text-[var(--gf-blue)] opacity-0 group-hover:opacity-100 transition-opacity hover:underline"
-                    >
-                      Add to Watchlist
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
+          <div className="flex flex-col overflow-y-auto scrollbar-hide">
+            {portfolios.length === 0 ? (
+              <div className="p-6 text-center text-[var(--gf-gray-text)] text-sm">
+                No portfolios found.
+              </div>
+            ) : (
+              portfolios.map((item, i) => (
+                <div key={i} onClick={() => router.push(`/portfolio/${item.id}`)} className="flex justify-between items-center p-4 hover:bg-[#3c4043] cursor-pointer border-b border-[var(--gf-border)] last:border-0 transition-colors">
+                  <div className="font-medium text-[var(--foreground)] text-sm">{item.name}</div>
+                  <ChevronDown size={16} className="-rotate-90 text-[var(--gf-gray-text)]" />
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
-        {/* 1. Index Stocks (Horizontal Scroll) */}
-        <div className="mb-10">
-          <div className="flex gap-4 overflow-x-auto pb-4 pt-2 px-1 -mx-1 scrollbar-hide">
-            {(!indices || indices.length === 0) ? (
-              <>
-                {[1, 2, 3, 4].map(n => (
-                  <div key={n} className="min-w-[200px] h-28 bg-[var(--gf-surface)] p-4 rounded-xl border border-[var(--gf-border)] animate-pulse flex flex-col justify-between">
-                    <div className="h-4 bg-[#3c4043] rounded w-1/2"></div>
-                    <div className="h-6 bg-[#3c4043] rounded w-3/4"></div>
-                    <div className="h-4 bg-[#3c4043] rounded w-1/3"></div>
-                  </div>
-                ))}
-              </>
+        {/* Watchlist */}
+        <div className="bg-[var(--gf-surface)] border border-[var(--gf-border)] rounded-xl overflow-hidden flex flex-col h-[400px]">
+          <div className="p-4 border-b border-[var(--gf-border)]">
+            <h3 className="font-medium text-[var(--foreground)]">Watchlist</h3>
+          </div>
+          <div className="flex flex-col overflow-y-auto scrollbar-hide">
+            {watchlist.length === 0 ? (
+              <div className="p-6 text-center text-[var(--gf-gray-text)] text-sm">
+                Your watchlist is empty. Search for stocks above.
+              </div>
             ) : (
-              indices.map((idx, i) => (
-                <div key={i} onClick={() => idx.symbol && router.push(`/stocks/${idx.symbol}`)} className="min-w-[200px] bg-[var(--gf-surface)] p-4 rounded-xl border border-[var(--gf-border)] cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:shadow-black/20 hover:bg-[#3c4043] transition-all duration-300">
-                  <div className="text-sm font-medium mb-1">{idx.name}</div>
-                  <div className="text-lg mb-1 tracking-tight">{idx.price}</div>
-                  <div className={`text-sm flex items-center ${idx.isUp ? 'text-[var(--gf-green)]' : 'text-[var(--gf-red)]'}`}>
-                    {idx.percent} {idx.isUp ? <TrendingUp size={14} className="ml-1" /> : <TrendingDown size={14} className="ml-1" />}
+              watchlist.map((item, i) => (
+                <div key={i} onClick={() => router.push(`/stocks/${encodeURIComponent(item.symbol)}`)} className="flex justify-between items-center p-4 hover:bg-[#3c4043] cursor-pointer border-b border-[var(--gf-border)] last:border-0 transition-colors">
+                  <div>
+                    <div className="font-medium text-[var(--foreground)] text-sm">{item.symbol}</div>
+                    <div className="text-xs text-[var(--gf-gray-text)] mt-0.5 truncate max-w-[120px]">{item.name}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-medium text-[var(--foreground)]">View</div>
                   </div>
                 </div>
               ))
@@ -276,134 +275,24 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* 2. Watchlist */}
-        <div className="mb-10">
-          <h2 className="text-xl font-medium mb-4">Watchlist</h2>
-          {watchlist.length === 0 ? (
-            <div className="bg-[var(--gf-surface)] border border-[var(--gf-border)] rounded-xl p-12 flex flex-col items-center text-center">
-              <svg className="w-24 h-24 text-[var(--gf-border)] mb-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-              <h3 className="text-lg font-medium mb-2">Track Your Favorite Stocks</h3>
-              <p className="text-[var(--gf-gray-text)] mb-6 max-w-md">Your watchlist is empty. Add a stock symbol directly or search above to monitor performance.</p>
-              
-              <form onSubmit={handleDirectAdd} className="flex gap-2 w-full max-w-sm relative">
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    value={directAddSymbol}
-                    onChange={(e) => setDirectAddSymbol(e.target.value.toUpperCase())}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleDirectAdd(e); }}
-                    onFocus={() => setIsDirectAddFocused(true)}
-                    onBlur={() => setTimeout(() => setIsDirectAddFocused(false), 150)}
-                    placeholder="Enter Symbol (e.g. INFY)"
-                    className="w-full bg-[var(--background)] border border-[var(--gf-border)] rounded-full px-4 py-2 text-sm outline-none focus:border-[var(--gf-blue)] transition-colors"
-                  />
-                  {isDirectAddFocused && directAddResults.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-[#303134] border border-[var(--gf-border)] rounded-xl overflow-hidden shadow-2xl z-50">
-                      {directAddResults.map(sec => (
-                        <div 
-                          key={sec.id}
-                          className="px-4 py-3 hover:bg-[#3c4043] cursor-pointer text-sm"
-                          onClick={() => setDirectAddSymbol(sec.symbol)}
-                        >
-                          <div className="font-medium text-[var(--foreground)]">{sec.symbol}</div>
-                          <div className="text-xs text-[var(--gf-gray-text)] truncate">{sec.name}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <button type="submit" className="flex items-center gap-2 text-sm bg-[var(--gf-blue)] text-black px-6 py-2 rounded-full hover:bg-opacity-90 transition-colors font-medium whitespace-nowrap">
-                  <Plus size={16} /> Add
-                </button>
-              </form>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {watchlist.map((sec) => (
-                <div key={sec.id} onClick={() => router.push(`/stocks/${sec.symbol}`)} className="bg-[var(--gf-surface)] border border-[var(--gf-border)] rounded-xl p-4 cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:shadow-black/20 hover:bg-[#3c4043] transition-all duration-300 flex justify-between items-center group">
-                  <div>
-                    <div className="font-medium text-[var(--foreground)] tracking-tight">{sec.symbol}</div>
-                    <div className="text-xs text-[var(--gf-gray-text)] truncate max-w-[150px]">{sec.name}</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">View</span>
-                    <ChevronDown size={16} className="-rotate-90 text-[var(--gf-gray-text)] group-hover:text-white transition-colors" />
-                  </div>
-                </div>
-              ))}
-              
-              {/* Add More Card */}
-              <div className="bg-[var(--gf-surface)] border border-[var(--gf-border)] border-dashed rounded-xl p-4 flex items-center justify-center relative">
-                <form onSubmit={handleDirectAdd} className="flex gap-2 w-full relative">
-                  <div className="flex-1 relative">
-                    <input
-                      type="text"
-                      value={directAddSymbol}
-                      onChange={(e) => setDirectAddSymbol(e.target.value.toUpperCase())}
-                      onKeyDown={(e) => { if (e.key === 'Enter') handleDirectAdd(e); }}
-                      onFocus={() => setIsDirectAddFocused(true)}
-                      onBlur={() => setTimeout(() => setIsDirectAddFocused(false), 150)}
-                      placeholder="Symbol..."
-                      className="w-full bg-transparent border-b border-[var(--gf-border)] px-2 py-1 text-sm outline-none focus:border-[var(--gf-blue)] transition-colors"
-                    />
-                    {isDirectAddFocused && directAddResults.length > 0 && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-[#303134] border border-[var(--gf-border)] rounded-lg overflow-hidden shadow-2xl z-50">
-                        {directAddResults.map(sec => (
-                          <div 
-                            key={sec.id}
-                            className="px-4 py-2 hover:bg-[#3c4043] cursor-pointer text-sm"
-                            onClick={() => setDirectAddSymbol(sec.symbol)}
-                          >
-                            <div className="font-medium text-[var(--foreground)]">{sec.symbol}</div>
-                            <div className="text-xs text-[var(--gf-gray-text)] truncate">{sec.name}</div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <button type="submit" className="flex items-center gap-1 text-sm bg-[var(--gf-blue)] text-black px-3 py-1 rounded hover:bg-opacity-90 transition-colors font-medium whitespace-nowrap">
-                    <Plus size={14} /> Add
-                  </button>
-                </form>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 3. Finance Related News */}
-        <div className="mb-10">
-          <h2 className="text-xl font-medium mb-4">India market summary</h2>
-          <div className="space-y-4">
+        {/* Market News */}
+        <div className="bg-[var(--gf-surface)] border border-[var(--gf-border)] rounded-xl overflow-hidden flex flex-col h-[400px]">
+          <div className="p-4 border-b border-[var(--gf-border)]">
+            <h3 className="font-medium text-[var(--foreground)]">Market News</h3>
+          </div>
+          <div className="flex flex-col overflow-y-auto scrollbar-hide">
             {news.length === 0 ? (
-              <>
-                {[1, 2, 3].map(n => (
-                  <div key={n} className="bg-[var(--gf-surface)] border border-[var(--gf-border)] rounded-xl p-5 flex justify-between items-center animate-pulse">
-                    <div className="flex gap-4 items-center w-full">
-                      <div className="w-16 h-16 bg-[#3c4043] rounded flex-shrink-0"></div>
-                      <div className="flex flex-col gap-2 w-full max-w-xl">
-                        <div className="h-5 bg-[#3c4043] rounded w-full"></div>
-                        <div className="h-3 bg-[#3c4043] rounded w-1/3 mt-1"></div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </>
+              <div className="p-6 text-center text-[var(--gf-gray-text)] text-sm">
+                Loading news...
+              </div>
             ) : (
-              news.slice(0, 5).map((n, i) => (
-                <a key={i} href={n.link} target="_blank" rel="noopener noreferrer" className="block bg-[var(--gf-surface)] border border-[var(--gf-border)] rounded-xl p-5 hover:bg-[#3c4043] transition-colors flex justify-between items-center">
-                  <div className="flex gap-4 items-center">
-                    {n.thumbnail && (
-                      <img src={n.thumbnail} alt={n.title} className="w-16 h-16 object-cover rounded" />
-                    )}
-                    <div>
-                      <h3 className="font-medium text-[var(--foreground)] mb-1 line-clamp-2">{n.title}</h3>
-                      <span className="text-xs text-[var(--gf-gray-text)]">{n.publisher} • {new Date(n.publishedAt).toLocaleDateString()}</span>
-                    </div>
+              news.slice(0, 10).map((item, i) => (
+                <a key={i} href={item.link} target="_blank" rel="noopener noreferrer" className="flex justify-between items-start p-4 hover:bg-[#3c4043] cursor-pointer border-b border-[var(--gf-border)] last:border-0 transition-colors">
+                  <div className="flex-1 pr-3">
+                    <div className="font-medium text-[var(--foreground)] text-sm line-clamp-2">{item.title}</div>
+                    <div className="text-xs text-[var(--gf-gray-text)] mt-1">{item.publisher}</div>
                   </div>
-                  <ChevronDown size={20} className="-rotate-90 text-[var(--gf-gray-text)]" />
+                  <ExternalLink size={14} className="text-[var(--gf-gray-text)] flex-shrink-0 mt-0.5" />
                 </a>
               ))
             )}

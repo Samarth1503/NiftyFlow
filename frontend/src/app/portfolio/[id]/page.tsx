@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import api from "@/lib/api";
 import { TrendingUp, TrendingDown, RefreshCcw, ArrowLeft } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { useMemo } from "react";
 import Link from "next/link";
 
 interface Holding {
@@ -192,25 +193,56 @@ export default function PortfolioPage() {
           ))}
         </div>
         
-        <div className="h-80 w-full">
+        <div className="h-80 w-full relative">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="colorValuePort" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={(() => {
+                      if (chartData.length < 2) return '#9aa0a6';
+                      let first = chartData.find(d => d.value !== null && d.value !== undefined)?.value;
+                      let last = [...chartData].reverse().find(d => d.value !== null && d.value !== undefined)?.value;
+                      if (first == null || last == null) return '#9aa0a6';
+                      if (last > first) return '#90e58c';
+                      if (last < first) return '#ff5662';
+                      return '#9aa0a6';
+                  })()} stopOpacity={0.6}/>
+                  <stop offset="95%" stopColor={(() => {
+                      if (chartData.length < 2) return '#9aa0a6';
+                      let first = chartData.find(d => d.value !== null && d.value !== undefined)?.value;
+                      let last = [...chartData].reverse().find(d => d.value !== null && d.value !== undefined)?.value;
+                      if (first == null || last == null) return '#9aa0a6';
+                      if (last > first) return '#90e58c';
+                      if (last < first) return '#ff5662';
+                      return '#9aa0a6';
+                  })()} stopOpacity={0}/>
+                </linearGradient>
+              </defs>
               <XAxis dataKey="date" stroke="var(--gf-gray-text)" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke="var(--gf-gray-text)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val.toFixed(0)}`} domain={['auto', 'auto']} />
+              <YAxis stroke="var(--gf-gray-text)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val.toFixed(0)}`} domain={['auto', 'auto']} width={80} />
               <Tooltip 
-                contentStyle={{ backgroundColor: 'var(--gf-surface)', border: '1px solid var(--gf-border)', borderRadius: '8px' }}
+                contentStyle={{ backgroundColor: '#303134', border: '1px solid #3c4043', borderRadius: '8px' }}
                 itemStyle={{ color: 'var(--foreground)' }}
                 formatter={(value: any) => [`₹${Number(value).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, 'Portfolio Value']}
               />
-              <Line 
+              <Area 
                 type="monotone" 
                 dataKey="value" 
-                stroke="#8ab4f8" 
+                stroke={(() => {
+                      if (chartData.length < 2) return '#9aa0a6';
+                      let first = chartData.find(d => d.value !== null && d.value !== undefined)?.value;
+                      let last = [...chartData].reverse().find(d => d.value !== null && d.value !== undefined)?.value;
+                      if (first == null || last == null) return '#9aa0a6';
+                      if (last > first) return '#90e58c';
+                      if (last < first) return '#ff5662';
+                      return '#9aa0a6';
+                  })()} 
                 strokeWidth={2} 
-                dot={false}
+                fillOpacity={1}
+                fill="url(#colorValuePort)"
                 activeDot={{ r: 6 }}
               />
-            </LineChart>
+            </AreaChart>
           </ResponsiveContainer>
         </div>
       </div>

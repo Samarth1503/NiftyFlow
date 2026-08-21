@@ -18,12 +18,12 @@ interface WatchlistSecurity {
 }
 
 interface IndexData {
-  id: string;
   name: string;
-  symbol?: string;
-  value: number;
-  change: number;
-  changePercent: number;
+  symbol: string;
+  current_price: number | null;
+  change: number | null;
+  change_percent: number | null;
+  timestamp?: string;
 }
 
 interface GlobalDataContextType {

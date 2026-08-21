@@ -198,8 +198,7 @@ export default function StockDetailsPage() {
           <Link href="/dashboard" className="flex items-center hover:text-white transition-colors">
             <ArrowLeft className="w-4 h-4 mr-1.5" /> Home
           </Link>
-          <span className="text-gray-500">|</span>
-          <span className="text-gray-400">{stock.symbol}:{stock.exchange || 'NSE'}</span>
+          
         </div>
         
         {/* Title block */}
