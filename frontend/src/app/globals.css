@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+:root {
+  --background: #101218;
+  --foreground: #e8eaed;
+  
+  /* NiftyFlow specific colors */
+  --gf-surface: #28292c78;
+  --gf-green: #90e58c;
+  --gf-green-bg: rgba(144, 229, 140, 0.15);
+  --gf-red: #ffa9af;
+  --gf-red-bg: rgba(255, 169, 175, 0.15);
+  --gf-gray-text: #9aa0a6;
+  --gf-border: #3c4043;
+  --gf-blue: #8ab4f8;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  
+  --color-gf-surface: var(--gf-surface);
+  --color-gf-green: var(--gf-green);
+  --color-gf-green-bg: var(--gf-green-bg);
+  --color-gf-red: var(--gf-red);
+  --color-gf-red-bg: var(--gf-red-bg);
+  --color-gf-gray-text: var(--gf-gray-text);
+  --color-gf-border: var(--gf-border);
+  --color-gf-blue: var(--gf-blue);
+
+  --font-sans: Roboto, Arial, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+
+body {
+  font-weight: 400;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent; 
+}
+::-webkit-scrollbar-thumb {
+  background: #3c4043; 
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9aa0a6; 
+}
