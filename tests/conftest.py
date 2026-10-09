@@ -5,6 +5,7 @@ import sys
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.pool import StaticPool
 from httpx import AsyncClient, ASGITransport
+from unittest.mock import patch
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -20,6 +21,7 @@ def event_loop():
 
 from backend.db.base import Base
 from backend.db.session import get_db
+import backend.db.session as session_module
 from main import app
 
 app.state.limiter.enabled = False
@@ -43,8 +45,15 @@ async def db_session():
         expire_on_commit=False,
     )
     
-    async with TestingSessionLocal() as session:
-        yield session
+    # Patch WorkerSessionLocal everywhere
+    with patch.object(session_module, "WorkerSessionLocal", TestingSessionLocal):
+        # We also need to patch the ones imported directly into tasks
+        import backend.worker.tasks
+        import backend.worker.schedule_tasks
+        with patch.object(backend.worker.tasks, "WorkerSessionLocal", TestingSessionLocal, create=True):
+            with patch.object(backend.worker.schedule_tasks, "WorkerSessionLocal", TestingSessionLocal, create=True):
+                async with TestingSessionLocal() as session:
+                    yield session
         
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)

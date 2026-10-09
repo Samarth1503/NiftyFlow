@@ -27,7 +27,7 @@ graph TD
     Client[Frontend / Client] -->|REST / SSE| API[FastAPI Web Server]
     API -->|Async Read/Write| DB[(PostgreSQL)]
     
-    subingest [Data Ingestion Pipeline]
+    subgraph subingest [Data Ingestion Pipeline]
     API -->|Submit Task| Redis[Redis Broker / Cache]
     Redis -->|Consume Task| Celery[Celery Worker]
     Celery -->|Fetch| ExtAPI[yfinance / Public APIs]

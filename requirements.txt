@@ -24,4 +24,4 @@ limits>=5.8.0
 # Machine Learning
 xgboost>=2.0.3
 scikit-learn>=1.4.1
-pandas>=2.2.0
+pandas>=2.2.0python-multipart
