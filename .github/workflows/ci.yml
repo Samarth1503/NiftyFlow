@@ -41,7 +41,9 @@ jobs:
         
     - name: Run Pytest
       env:
-        DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/niftyflow_test"
-        JWT_SECRET: "ci-test-secret"
+        POSTGRES_USER: "user"
+        POSTGRES_PASSWORD: "password"
+        POSTGRES_DB: "niftyflow_test"
+        SECRET_KEY: "ci-test-secret"
       run: |
         pytest tests/ -v
