@@ -5,6 +5,7 @@ import sys
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.pool import StaticPool
 from httpx import AsyncClient, ASGITransport
+from unittest.mock import patch
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -20,6 +21,7 @@ def event_loop():
 
 from backend.db.base import Base
 from backend.db.session import get_db
+import backend.db.session as session_module
 from main import app
 
 app.state.limiter.enabled = False
@@ -34,17 +36,28 @@ async def db_session():
         connect_args={"check_same_thread": False},
     )
     
+    from sqlalchemy import event
+    
+    @event.listens_for(engine.sync_engine, "connect")
+    def receive_connect(dbapi_connection, connection_record):
+        # Create a dummy set_config function so test_rls and WorkerSessionLocal don't crash on SQLite
+        dbapi_connection.create_function("set_config", 3, lambda a, b, c: None)
+        
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         
-    TestingSessionLocal = async_sessionmaker(
-        bind=engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-    )
+    # Reconfigure AsyncSessionLocal to use the test engine
+    old_async_bind = session_module.AsyncSessionLocal.kw.get('bind')
+    session_module.AsyncSessionLocal.configure(bind=engine)
     
-    async with TestingSessionLocal() as session:
-        yield session
+    # We must patch WorkerSessionLocal to avoid executing set_config directly, or just rely on the mock above.
+    # Since the mock above works for SQLite, WorkerSessionLocal will not crash.
+    
+    try:
+        async with session_module.AsyncSessionLocal() as session:
+            yield session
+    finally:
+        session_module.AsyncSessionLocal.configure(bind=old_async_bind)
         
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
